@@ -1,0 +1,117 @@
+MODULE CommunicationMain
+    VAR socketdev dev_socket;
+    VAR string data_in;
+    VAR num emotion_val;
+    
+    ! ตำแหน่ง Home จากค่าหน้าจอ FlexPendant ของคุณ
+    CONST jointtarget GHome := [[0, -1.42, 64.20, -2.84, -64.39, -31.89], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    
+    
+    ! สร้างจุดสำหรับอารมณ์ต่างๆ (ตอนนี้ตั้งค่าเลียนแบบ Home ไว้ ให้คุณไปเปลี่ยนองศาที่หุ่นยนต์ครับ)
+    CONST jointtarget jHappy     := [[1.20, -34.49, 62.63, 1.79, -27.22, -35.78], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jSad       := [[-1.73, 8.52, -0.60, 1.22, 118.06, -33.43], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jAngry     := [[-0.12, -2.12, 1.11, -1.69, -90.28, -29.62], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jSurprised := [[-1.90, -80.00, 68.87, -1.02, 13.95, -31.57], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jShy       := [[50.58, 23.84, 17.06, -48.50, 6.78, -38.46], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jPout      := [[-27.66, -73.48, 70.05, 18.09, -31.53, -55.35], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jRoll      := [[-27.66, -73.48, 70.05, 18.09, -31.53, -55.35], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jSleep     := [[1.89, -5.77, 63.41, -2.55, 32.57, -29.26], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    ! คำนวณจาก GHome โดยแกนที่ 1 (0 องศา) +/- 45 องศา
+    CONST jointtarget jSus_Left  := [[45, -1.42, 64.20, -2.84, -64.39, -31.89], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jSus_Right := [[-45, -1.42, 64.20, -2.84, -64.39, -31.89], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];! สำหรับ BLINK, ROLL, SUS อาจจะใช้จุดใกล้เคียงกันหรือจุด Home
+    ! คำนวณแกน 5 จาก GHome (-64.39) +/- 20 องศา
+    CONST jointtarget jBlink_Up   := [[0, -1.42, 64.20, -2.84, -44.39, -31.89], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    CONST jointtarget jBlink_Down := [[0, -1.42, 64.20, -2.84, -84.39, -31.89], [9E9, 9E9, 9E9, 9E9, 9E9, 9E9]];
+    
+    VAR bool is_ready := FALSE;
+
+    PROC Work_Group()
+        ! ปิด Socket เก่าเพื่อความสะอาด
+        SocketClose dev_socket;
+        SocketCreate dev_socket;
+        
+        ! เชื่อมต่อไปยัง IP คอมพิวเตอร์ของคุณ
+        SocketConnect dev_socket, "172.21.31.55", 9999 \Time:=5;
+        TPWrite "Robot: Connected to Python Server!";
+        
+        MoveAbsJ GHome, v100, fine, tool0;
+        is_ready := TRUE;
+        TPWrite "Robot: Ready at Home. Waiting for Emotion...";
+
+
+        WHILE TRUE DO
+            SocketReceive dev_socket \Str:=data_in;
+            IF StrToVal(data_in, emotion_val) THEN
+                TPWrite "Robot: Received Emotion ID : = " + NumToStr(emotion_val, 0);
+                ! 2. ไปยังจุดอารมณ์ที่ส่งมา
+                Handle_Emotion emotion_val;
+                
+                ! 3. ค้างไว้ที่จุดนั้น 5 วินาที
+                TPWrite "Robot: Holding position for 5 seconds...";
+                WaitTime 5;
+                
+                ! 4. สั่งกลับจุด Home และต้องหยุดให้สนิท (fine) 
+                ! ขั้นตอนนี้สำคัญ: ตราบใดที่ยังกลับไม่ถึง Home โปรแกรมจะไม่วนกลับไป SocketReceive ด้านบน
+                TPWrite "Robot: Returning to Home...";
+                MoveAbsJ GHome, v200, fine, tool0;
+                
+                TPWrite "Robot: Ready for next command.";
+            ENDIF
+        ENDWHILE
+    ERROR
+        is_ready := FALSE;
+        TPWrite "Connection Error. Retrying...";
+        SocketClose dev_socket;
+        WaitTime 2;
+        RETRY;
+    ENDPROC
+
+    PROC Handle_Emotion(num code)
+        TEST code
+            CASE 0: ! NEUTRAL
+                MoveAbsJ GHome, v100, z10, tool0;
+            CASE 1: ! HAPPY
+                MoveAbsJ jHappy, v300, fine, tool0;
+                TPWrite "Status: Feeling Happy!";
+            CASE 2: ! SAD
+                MoveAbsJ jSad, v100, fine, tool0;
+            CASE 3: ! ANGRY
+                MoveAbsJ jAngry, v400, fine, tool0;
+            CASE 4: ! SURPRISED
+                MoveAbsJ jSurprised, v300, fine, tool0;
+            CASE 5: ! SHY
+                MoveAbsJ jShy, v150, fine, tool0;
+            CASE 6: ! POUT
+                MoveAbsJ jPout, v200, fine, tool0;
+            CASE 7: ! ROLL
+                MoveAbsJ jRoll, v200, fine, tool0;
+            CASE 8: ! SLEEP
+                MoveAbsJ jSleep, v50, fine, tool0;
+            CASE 9: ! SUS (เคลื่อนที่แนวโค้งซ้าย-ขวา)
+                TPWrite "Robot: Investigating... SUS!";
+                ! ขยับไปทางซ้าย 45 องศา
+                MoveAbsJ jSus_Left, v200, z10, tool0;
+                ! ขยับไปทางขวา 45 องศา (ผ่านจุดศูนย์กลาง)
+                MoveAbsJ jSus_Right, v200, z10, tool0;
+                ! กลับมาที่จุด Home
+                MoveAbsJ GHome, v100, fine, tool0;
+            CASE 10: ! BLINK (กะพริบตาโดยขยับแกน 5)
+                TPWrite "Robot: Blinking...";
+                ! ขยับขึ้น
+                MoveAbsJ jBlink_Up, v200, z1, tool0;
+                ! ขยับลง
+                MoveAbsJ jBlink_Down, v200, z1, tool0;
+                ! กลับมาที่จุด Home
+                MoveAbsJ GHome, v100, fine, tool0;
+            CASE 99: ! PROXIMITY (เตือนระยะใกล้)
+                StopMove;
+                TPWrite "⚠️ SAFETY: Human too close!";
+                WaitTime 1;
+                StartMove;
+                MoveAbsJ GHome, v100, fine, tool0;
+            DEFAULT:
+                ! ถ้าเป็นเลขอื่นๆ (เช่น BLINK, ROLL) ให้กลับมาท่าปกติ
+                MoveAbsJ GHome, v200, z10, tool0;
+        ENDTEST
+    ENDPROC
+ENDMODULE
