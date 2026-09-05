@@ -22,7 +22,7 @@ from PIL import ImageTk
 
 # --- การตั้งค่า (Configuration) ---
 # API_KEY = "AIzaSyBLO96As8t8ulnFEc_khXXexMVxTOlclVY" # <--- Key ของคุณ
-API_KEY = "AIzaSyDHvAA_MYZBZCosXppUq2UiDYW5zD6dQPU" # <--- Key ของคุณ
+API_KEY = "Your AI API Key" # <--- Key ของคุณ
 genai.configure(api_key=API_KEY)
 
 # --- Global Variables ---
